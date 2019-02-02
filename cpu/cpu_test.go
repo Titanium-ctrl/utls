@@ -5,9 +5,10 @@
 package cpu_test
 
 import (
-	"github.com/refraction-networking/utls/cpu"
 	"runtime"
 	"testing"
+
+	"gitlab.com/yawning/utls.git/cpu"
 )
 
 func TestAMD64minimalFeatures(t *testing.T) {
