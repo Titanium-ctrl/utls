@@ -70,7 +70,7 @@ func (uconn *UConn) BuildHandshakeState() error {
 		}
 
 		uconn.HandshakeState.Hello = hello.getPublicPtr()
-		uconn.HandshakeState.State13.EcdheParams = ecdheParams
+		uconn.HandshakeState.State13.EcdheParams = ecdheParamMapToPublic(ecdheParams)
 		uconn.HandshakeState.C = uconn.Conn
 	} else {
 		if !uconn.ClientHelloBuilt {

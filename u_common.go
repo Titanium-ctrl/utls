@@ -167,7 +167,10 @@ func utlsMacSHA384(version uint16, key []byte) macFunction {
 	return tls10MAC{h: hmac.New(sha512.New384, key)}
 }
 
-var utlsSupportedCipherSuites []*cipherSuite
+var (
+	utlsSupportedCipherSuites []*cipherSuite
+	utlsSupportedGroups       map[CurveID]bool
+)
 
 func init() {
 	utlsSupportedCipherSuites = append(cipherSuites, []*cipherSuite{
@@ -176,6 +179,11 @@ func init() {
 		{OLD_TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, 32, 0, 12, ecdheECDSAKA,
 			suiteECDHE | suiteECDSA | suiteTLS12 | suiteDefaultOff, nil, nil, aeadChaCha20Poly1305},
 	}...)
+
+	utlsSupportedGroups = map[CurveID]bool{
+		X25519:    true,
+		CurveP256: true,
+	}
 }
 
 // EnableWeakCiphers allows utls connections to continue in some cases, when weak cipher was chosen.
@@ -193,4 +201,21 @@ func EnableWeakCiphers() {
 		{DISABLED_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384, 32, 48, 16, ecdheRSAKA,
 			suiteECDHE | suiteTLS12 | suiteDefaultOff | suiteSHA384, cipherAES, utlsMacSHA384, nil},
 	}...)
+}
+
+// EnableVartimeGroups allows utls connections to continue in some cases, when
+// a curve with a variable time implementation was chosen.  This provides
+// better compatibility with servers on the web, but weakens security.  This
+// provides better compatibility with servers on the web, but weakens security.
+// Feel free to use this option if you establish additional secure connection
+// inside of utls connection.  This option does not change the shape of
+// parrots (i.e. same groups will be offered either way).  Must be called
+// before establishing any connections.
+func EnableVartimeGroups() {
+	for _, curveID := range []CurveID{
+		CurveP384,
+		CurveP521,
+	} {
+		utlsSupportedGroups[curveID] = true
+	}
 }

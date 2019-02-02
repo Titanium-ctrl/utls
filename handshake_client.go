@@ -33,7 +33,7 @@ type clientHandshakeState struct {
 	uconn *UConn // [UTLS]
 }
 
-func (c *Conn) makeClientHello() (*clientHelloMsg, ecdheParameters, error) {
+func (c *Conn) makeClientHello() (*clientHelloMsg, map[CurveID]ecdheParameters, error) {
 	config := c.config
 	if len(config.ServerName) == 0 && !config.InsecureSkipVerify {
 		return nil, nil, errors.New("tls: either ServerName or InsecureSkipVerify must be specified in the tls.Config")
@@ -118,22 +118,42 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, ecdheParameters, error) {
 		hello.supportedSignatureAlgorithms = supportedSignatureAlgorithms
 	}
 
-	var params ecdheParameters
+	var paramMap map[CurveID]ecdheParameters
 	if hello.supportedVersions[0] == VersionTLS13 {
 		hello.cipherSuites = append(hello.cipherSuites, defaultCipherSuitesTLS13()...)
 
-		curveID := config.curvePreferences()[0]
-		if _, ok := curveForCurveID(curveID); curveID != X25519 && !ok {
-			return nil, nil, errors.New("tls: CurvePreferences includes unsupported curve")
-		}
-		params, err = generateECDHEParameters(config.rand(), curveID)
+		var err error
+		hello.keyShares, paramMap, err = paramsForCurves(config.rand(), config.curvePreferences())
 		if err != nil {
 			return nil, nil, err
 		}
-		hello.keyShares = []keyShare{{group: curveID, data: params.PublicKey()}}
 	}
 
-	return hello, params, nil
+	return hello, paramMap, nil
+}
+
+func paramsForCurves(rng io.Reader, curves []CurveID) ([]keyShare, map[CurveID]ecdheParameters, error) {
+	var (
+		paramMap  = make(map[CurveID]ecdheParameters)
+		keyShares []keyShare
+	)
+	for _, curveID := range curves {
+		if _, ok := curveForCurveID(curveID); curveID != X25519 && !ok {
+			return nil, nil, errors.New("tls: CurvePreferences includes unsupported curve")
+		}
+		if !utlsSupportedGroups[curveID] {
+			continue
+		}
+
+		params, err := generateECDHEParameters(rng, curveID)
+		if err != nil {
+			return nil, nil, err
+		}
+		keyShares = append(keyShares, keyShare{group: curveID, data: params.PublicKey()})
+		paramMap[curveID] = params
+	}
+
+	return keyShares, paramMap, nil
 }
 
 func (c *Conn) clientHandshake() (err error) {

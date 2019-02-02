@@ -34,7 +34,7 @@ type ClientHandshakeState struct {
 // TLS 1.3 only
 type TLS13OnlyState struct {
 	Suite         *CipherSuiteTLS13
-	EcdheParams   EcdheParameters
+	EcdheParams   map[CurveID]EcdheParameters // XXX/yawning - annoying
 	EarlySecret   []byte
 	BinderKey     []byte
 	CertReq       *CertificateRequestMsgTLS13
@@ -58,7 +58,7 @@ func (chs *ClientHandshakeState) toPrivate13() *clientHandshakeStateTLS13 {
 			c:           chs.C,
 			serverHello: chs.ServerHello.getPrivatePtr(),
 			hello:       chs.Hello.getPrivatePtr(),
-			ecdheParams: chs.State13.EcdheParams,
+			ecdheParams: ecdheParamMapToPrivate(chs.State13.EcdheParams),
 
 			session:     chs.Session,
 			earlySecret: chs.State13.EarlySecret,
@@ -82,7 +82,7 @@ func (chs13 *clientHandshakeStateTLS13) toPublic13() *ClientHandshakeState {
 		return nil
 	} else {
 		tls13State := TLS13OnlyState{
-			EcdheParams:   chs13.ecdheParams,
+			EcdheParams:   ecdheParamMapToPublic(chs13.ecdheParams),
 			EarlySecret:   chs13.earlySecret,
 			BinderKey:     chs13.binderKey,
 			CertReq:       chs13.certReq.toPublic(),
@@ -154,6 +154,22 @@ func (chs12 *clientHandshakeState) toPublic12() *ClientHandshakeState {
 
 type EcdheParameters interface {
 	ecdheParameters
+}
+
+func ecdheParamMapToPublic(src map[CurveID]ecdheParameters) map[CurveID]EcdheParameters {
+	dst := make(map[CurveID]EcdheParameters)
+	for curveID, param := range src {
+		dst[curveID] = EcdheParameters(param)
+	}
+	return dst
+}
+
+func ecdheParamMapToPrivate(src map[CurveID]EcdheParameters) map[CurveID]ecdheParameters {
+	dst := make(map[CurveID]ecdheParameters)
+	for curveID, param := range src {
+		dst[curveID] = ecdheParameters(param)
+	}
+	return dst
 }
 
 type CertificateRequestMsgTLS13 struct {

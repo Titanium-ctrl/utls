@@ -568,7 +568,7 @@ func (uconn *UConn) ApplyPreset(p *ClientHelloSpec) error {
 		return err
 	}
 	uconn.HandshakeState.Hello = privateHello.getPublicPtr()
-	uconn.HandshakeState.State13.EcdheParams = ecdheParams
+	uconn.HandshakeState.State13.EcdheParams = ecdheParamMapToPublic(ecdheParams)
 	hello := uconn.HandshakeState.Hello
 	session := uconn.HandshakeState.Session
 
@@ -652,7 +652,6 @@ func (uconn *UConn) ApplyPreset(p *ClientHelloSpec) error {
 				}
 			}
 		case *KeyShareExtension:
-			preferredCurveIsSet := false
 			for i := range ext.KeyShares {
 				curveID := ext.KeyShares[i].Group
 				if curveID == GREASE_PLACEHOLDER {
@@ -663,17 +662,25 @@ func (uconn *UConn) ApplyPreset(p *ClientHelloSpec) error {
 					continue
 				}
 
-				ecdheParams, err := generateECDHEParameters(uconn.config.rand(), curveID)
-				if err != nil {
-					return fmt.Errorf("unsupported Curve in KeyShareExtension: %v."+
-						"To mimic it, fill the Data(key) field manually.", curveID)
+				var params ecdheParameters
+				switch utlsSupportedGroups[curveID] {
+				case true:
+					var ok bool
+					params, ok = uconn.HandshakeState.State13.EcdheParams[curveID]
+					if !ok {
+						// Should never happen.
+						return fmt.Errorf("BUG: unsupported Curve in KeyShareExtension: %v.", curveID)
+					}
+				case false:
+					var err error
+					params, err = generateECDHEParameters(uconn.config.rand(), curveID)
+					if err != nil {
+						return fmt.Errorf("unsupported Curve in KeyShareExtension: %v."+
+							"To mimic it, fill the Data(key) field manually.", curveID)
+					}
 				}
-				ext.KeyShares[i].Data = ecdheParams.PublicKey()
-				if !preferredCurveIsSet {
-					// only do this once for the first non-grease curve
-					uconn.HandshakeState.State13.EcdheParams = ecdheParams
-					preferredCurveIsSet = true
-				}
+
+				ext.KeyShares[i].Data = params.PublicKey()
 			}
 		case *SupportedVersionsExtension:
 			for i := range ext.Versions {
@@ -838,10 +845,7 @@ func (uconn *UConn) generateRandomizedSpec() (ClientHelloSpec, error) {
 			{Group: X25519}, // the key for the group will be generated later
 		}}
 		if r.FlipWeightedCoin(0.25) {
-			// do not ADD second keyShare because crypto/tls does not support multiple ecdheParams
-			// TODO: add it back when they implement multiple keyShares, or implement it oursevles
-			// ks.KeyShares = append(ks.KeyShares, KeyShare{Group: CurveP256})
-			ks.KeyShares[0].Group = CurveP256
+			ks.KeyShares = append(ks.KeyShares, KeyShare{Group: CurveP256})
 		}
 		pskExchangeModes := PSKKeyExchangeModesExtension{[]uint8{pskModeDHE}}
 		supportedVersionsExt := SupportedVersionsExtension{
