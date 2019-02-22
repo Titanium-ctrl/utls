@@ -6,7 +6,6 @@ package tls
 
 import (
 	"crypto"
-	"crypto/aes"
 	"crypto/cipher"
 	"crypto/des"
 	"crypto/hmac"
@@ -132,7 +131,7 @@ func cipher3DES(key, iv []byte, isRead bool) interface{} {
 }
 
 func cipherAES(key, iv []byte, isRead bool) interface{} {
-	block, _ := aes.NewCipher(key)
+	block, _ := aesNewCipher(key)
 	if isRead {
 		return cipher.NewCBCDecrypter(block, iv)
 	}
@@ -242,7 +241,7 @@ func aeadAESGCM(key, noncePrefix []byte) aead {
 	if len(noncePrefix) != noncePrefixLength {
 		panic("tls: internal error: wrong nonce length")
 	}
-	aes, err := aes.NewCipher(key)
+	aes, err := aesNewCipher(key)
 	if err != nil {
 		panic(err)
 	}
@@ -260,7 +259,7 @@ func aeadAESGCMTLS13(key, nonceMask []byte) aead {
 	if len(nonceMask) != aeadNonceLength {
 		panic("tls: internal error: wrong nonce length")
 	}
-	aes, err := aes.NewCipher(key)
+	aes, err := aesNewCipher(key)
 	if err != nil {
 		panic(err)
 	}
